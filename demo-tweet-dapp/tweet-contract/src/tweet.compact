@@ -154,7 +154,7 @@ export circuit unlikeTweet(tweetId: Bytes<32>): []{
     const likeCommit = persistentCommit<Bytes<32>>(disclose(getSecretKey()), kernel.self().bytes);
     const path = disclose(findLiker(likeCommit));
 
-    assert (likers.checkRoot(merkleTreePathRoot<100, Bytes<32>>(path)), "You didn't like this tweet");
+    assert (likers.checkRoot(merkleTreePathRoot <100, Bytes<32>>(path)), "You didn't like this tweet");
     SendFundAndManageChange(1000000, ownPublicKey());
 
     const updatedTweet = Tweet {
