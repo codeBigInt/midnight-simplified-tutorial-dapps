@@ -1,6 +1,6 @@
-module Helper{
+module Helpers{
     import CompactStandardLibrary;
-    export {TVL, ReceiveFundAndAddToTVL, SendFundAndManageChange};
+    export {TVL, ReceiveFundAndAddToTVL, SendFundAndManageChange, SendFundImmediately};
 
     ledger TVL: QualifiedCoinInfo;
 

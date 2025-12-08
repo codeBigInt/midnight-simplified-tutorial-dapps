@@ -1,5 +1,8 @@
 pragma language_version >= 0.17.0;
 import CompactStandardLibrary;
+import Helpers;
+
+export {TVL};
 
 export struct Tweet {
     createdAt: Uint<64>;
@@ -13,13 +16,13 @@ export struct Tweet {
 ledger tweets: Map<Bytes<32>, Tweet>; /** Tracks tweets created onchain and its details */
 ledger likers: MerkleTree<100, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
 sealed ledger promotionPaymentCpk: ZswapCoinPublicKey; /** Stores address to send promotional funds */
+sealed ledger likePaymentThreshold: Uint<128>;
 
 
 /** Witnes for offchain interaction */
 witness getCurrentTime(): Uint<64>;
 witness findLiker(commitHash: Bytes<32>): MerkleTreePath<100, Bytes<32>>;
 witness getSecretKey(): Bytes<32>;
-witness likePaymentThreshold: Uint<8>;
 
 
 constructor(){
@@ -50,7 +53,7 @@ export circuit createTweet(tweetId: Bytes<32>, tweet: Opaque<"string">): []{
 export circuit updateTweet(tweetId: Bytes<32>, newTweet: Opaque<"string">): []{
     const disclosedTweetId = disclose(tweetId);
     assert (tweets.member(disclosedTweetId), "Tweet with specified ID does not exist");
-    const tweet = tweets.lookup(tweetId);
+    const tweet = tweets.lookup(disclosedTweetId);
     const owner = generatePk(disclose(getSecretKey()));
     assert (owner == tweet.owner, "You are not the owner");
 
@@ -66,13 +69,13 @@ export circuit updateTweet(tweetId: Bytes<32>, newTweet: Opaque<"string">): []{
 export circuit deleteTweet(tweetId: Bytes<32>): []{
     const disclosedTweetId = disclose(tweetId);
     assert (tweets.member(disclosedTweetId), "Tweet with specified ID does not exist");
-    const tweet = tweets.lookup(tweetId);
+    const tweet = tweets.lookup(disclosedTweetId);
     const owner = generatePk(disclose(getSecretKey()));
     assert (owner == tweet.owner, "You are not the owner");
     
-    if(tweet.likes > 5){
-        const earnings = tweet.likes * 1000000;
-        SendFundAndManageChange(earnings, ownPublicKey());
+    if((tweet.likes as Uint<64>) > likePaymentThreshold){
+        const earnings = (tweet.likes as Uint<64>) * 1000000;
+        SendFundAndManageChange(earnings as Uint<128>, ownPublicKey());
         tweets.remove(disclosedTweetId);
     }else{
         tweets.remove(disclosedTweetId);
@@ -84,7 +87,7 @@ export circuit promoteTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
     const disclosedCoin = disclose(coin);
 
     assert (tweets.member(disclosedTweetId), "Tweet with specified ID does not exist");
-    const tweet = tweets.lookup(tweetId);
+    const tweet = tweets.lookup(disclosedTweetId);
 
     const owner = generatePk(disclose(getSecretKey()));
     assert (owner == tweet.owner, "You are not the owner");
@@ -106,13 +109,13 @@ export circuit promoteTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
 export circuit withdrawTweetEarnings(tweetId: Bytes<32>): []{
     const disclosedTweetId = disclose(tweetId);
     assert (tweets.member(disclosedTweetId), "Tweet with specified ID does not exist");
-    const tweet = tweets.lookup(tweetId);
+    const tweet = tweets.lookup(disclosedTweetId);
     const owner = generatePk(disclose(getSecretKey()));
     assert (owner == tweet.owner, "You are not the owner");
-    assert (tweet.likes > 5, "Below withdrawal threshold");
+    assert ((tweet.likes as Uint<64>) > likePaymentThreshold, "Below withdrawal threshold");
     
-    const earnings = tweet.likes * 1000000;
-    SendFundAndManageChange(earnings, ownPublicKey());
+    const earnings = (tweet.likes as Uint<64>) * 1000000;
+    SendFundAndManageChange(earnings as Uint<128>, ownPublicKey());
 
     const updatedTweet = Tweet {
         ...tweet,
@@ -122,13 +125,13 @@ export circuit withdrawTweetEarnings(tweetId: Bytes<32>): []{
     tweets.insert(disclosedTweetId, updatedTweet);
 }
 
-/** For Viewer */
+/** For Viewers and tweet engagement */
 export circuit likeTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
     const disclosedTweetId = disclose(tweetId);
     const disclosedCoin = disclose(coin);
 
     assert (tweets.member(disclosedTweetId), "Tweet with specified ID does not exist");
-    const tweet = tweets.lookup(tweetId);
+    const tweet = tweets.lookup(disclosedTweetId);
 
     const expectedFee = 1000000; /** 1tDUST ==> 1000000 SPECKS */
 
@@ -150,11 +153,11 @@ export circuit unlikeTweet(tweetId: Bytes<32>): []{
     const disclosedTweetId = disclose(tweetId);
 
     assert (tweets.member(disclosedTweetId), "Tweet with specified ID does not exist");
-    const tweet = tweets.lookup(tweetId);
+    const tweet = tweets.lookup(disclosedTweetId);
     const likeCommit = persistentCommit<Bytes<32>>(disclose(getSecretKey()), kernel.self().bytes);
     const path = disclose(findLiker(likeCommit));
 
-    assert (likers.checkRoot(merkleTreePathRoot <100, Bytes<32>>(path)), "You didn't like this tweet");
+    assert (likers.checkRoot(merkleTreePathRoot<100, Bytes<32>>(path)), "You didn't like this tweet");
     SendFundAndManageChange(1000000, ownPublicKey());
 
     const updatedTweet = Tweet {
@@ -167,7 +170,7 @@ export circuit unlikeTweet(tweetId: Bytes<32>): []{
 
 export circuit generatePk(secret: Bytes<32>): Bytes<32>{
     return persistentHash<Vector<2, Bytes<32>>>([
-        sk,
+        secret,
         kernel.self().bytes
-    ])
+    ]);
 }

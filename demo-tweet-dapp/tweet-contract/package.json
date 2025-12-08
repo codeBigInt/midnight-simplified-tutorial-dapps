@@ -4,12 +4,16 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test-compile": "compact compile --skip-zk ./src/tweet.compact src/managed/tweet",
+    "compile": "compact compile --skip-zk ./src/tweet.compact src/managed/tweet",
+    "testnet-remote": "tsnode deploy.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
   "dependencies": {
@@ -19,7 +23,9 @@
     "@midnight-ntwrk/midnight-js-utils": "^2.1.0",
     "@midnight-ntwrk/wallet": "^5.0.0",
     "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
     "@types/node": "^24.10.1",
-    "rxjs": "^7.8.2"
+    "rxjs": "^7.8.2",
+    "vitest": "^4.0.15"
   }
 }
