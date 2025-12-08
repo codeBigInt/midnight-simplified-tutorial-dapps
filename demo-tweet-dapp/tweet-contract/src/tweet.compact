@@ -11,13 +11,13 @@ export struct Tweet {
 }
 
 ledger tweets: Map<Bytes<32>, Tweet>; /** Tracks tweets created onchain and its details */
-ledger likes: MerkleTree<100, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
+ledger likers: MerkleTree<100, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
 sealed ledger promotionPaymentCpk: ZswapCoinPublicKey; /** Stores address to send promotional funds */
 
 
 /** Witnes for offchain interaction */
 witness getCurrentTime(): Uint<64>;
-witness findLiker(commitHash: Bytes<32>): MerkleTreePath<Bytes<32>>;
+witness findLiker(commitHash: Bytes<32>): MerkleTreePath<100, Bytes<32>>;
 witness getSecretKey(): Bytes<32>;
 witness likePaymentThreshold: Uint<8>;
 
@@ -136,7 +136,7 @@ export circuit likeTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
 
     ReceiveFundAndAddToTVL(disclosedCoin);
     /** Include like commitment in the merkel tree */
-    likes.insert(persistentCommit<Bytes<32>>(disclose(getSecretKey()), kernel.self().bytes));
+    likers.insert(persistentCommit<Bytes<32>>(disclose(getSecretKey()), kernel.self().bytes));
 
     const updatedTweet = Tweet {
         ...tweet,
@@ -154,7 +154,7 @@ export circuit unlikeTweet(tweetId: Bytes<32>): []{
     const likeCommit = persistentCommit<Bytes<32>>(disclose(getSecretKey()), kernel.self().bytes);
     const path = disclose(findLiker(likeCommit));
 
-    assert (likes.findLeafPath(merkleTreeLeafPath<100, Bytes<32>>(path)), "You didn't like this tweet");
+    assert (likers.checkRoot(merkleTreePathRoot<100, Bytes<32>>(path)), "You didn't like this tweet");
     SendFundAndManageChange(1000000, ownPublicKey());
 
     const updatedTweet = Tweet {

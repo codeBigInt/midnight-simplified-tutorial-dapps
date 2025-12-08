@@ -1,0 +1,8 @@
+node_modules
+dist
+managed
+midnight_db_levels
+logs
+
+.env
+.env.**
