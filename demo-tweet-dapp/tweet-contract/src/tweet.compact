@@ -13,10 +13,10 @@ export struct Tweet {
     promoted: Boolean;
 }
 
-ledger tweets: Map<Bytes<32>, Tweet>; /** Tracks tweets created onchain and its details */
-ledger likers: MerkleTree<100, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
-sealed ledger promotionPaymentCpk: ZswapCoinPublicKey; /** Stores address to send promotional funds */
-sealed ledger likePaymentThreshold: Uint<128>;
+export ledger tweets: Map<Bytes<32>, Tweet>; /** Tracks tweets created onchain and its details */
+export ledger likers: MerkleTree<100, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
+export sealed ledger promotionPaymentCpk: ZswapCoinPublicKey; /** Stores address to send promotional funds */
+export sealed ledger likePaymentThreshold: Uint<128>;
 
 
 /** Witnes for offchain interaction */
