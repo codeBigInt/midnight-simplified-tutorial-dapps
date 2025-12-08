@@ -1,0 +1,36 @@
+module Helper{
+    import CompactStandardLibrary;
+    export {TVL, ReceiveFundAndAddToTVL, SendFundAndManageChange};
+
+    ledger TVL: QualifiedCoinInfo;
+
+    export circuit ReceiveFundAndAddToTVL(disclosedCoin: CoinInfo): [] {
+        /** Recieves coin into the contract */
+        receive(disclosedCoin);
+
+        const coinToInsert = TVL.value > 0 ? mergeCoinImmediate(TVL, disclosedCoin) : disclosedCoin;
+
+        TVL.writeCoin(coinToInsert, right<ZswapCoinPublicKey, ContractAddress>(
+            kernel.self()
+        ));
+    }
+    
+    export circuit SendFundAndManageChange(amt: Uint<128>, to: ZswapCoinPublicKey): [] {
+        const sendResult = send(TVL, left<ZswapCoinPublicKey, ContractAddress>(to), amt);
+
+        if(sendResult.change.is_some){
+            TVL.writeCoin(sendResult.change.value, right<ZswapCoinPublicKey, ContractAddress>(
+            kernel.self()
+            ));
+        }else{
+            TVL.resetToDefault();
+        }
+    }
+
+    export circuit SendFundImmediately(amt: Uint<128>, to: ZswapCoinPublicKey, disclosedCoin: CoinInfo): [] {
+        /** Recieves coin into the contract */
+        receive(disclosedCoin);
+        
+        sendImmediate(disclosedCoin, left<ZswapCoinPublicKey, ContractAddress>(to), amt);
+    }
+}
