@@ -2,18 +2,22 @@
   "name": "demo-tweet-dapp",
   "version": "1.0.0",
   "description": "",
-  "main": "index.js",
+  "type": "module",
+  "main": "index.ts",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "test-compile": "compact compile --skip-zk ./src/tweet.compact src/managed/tweet",
-    "compile": "compact compile --skip-zk ./src/tweet.compact src/managed/tweet",
-    "testnet-remote": "tsnode deploy.ts"
+    "compile": "compact compile ./src/tweet.compact src/managed/tweet",
+    "testnet-remote-dev": "node --loader ts-node/esm src/deploy.ts",
+    "build": "rm -rf dist && tsc --project tsconfig.build.json &&  cp -R src/managed dist && cp src/tweet.compact dist"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "nodemon": "^3.1.11",
     "ts-node": "^10.9.2",
+    "ts-node-dev": "^2.0.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {

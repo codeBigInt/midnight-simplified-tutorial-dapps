@@ -1,26 +1,27 @@
 import { deployContract, DeployedContract, findDeployedContract, FoundContract } from "@midnight-ntwrk/midnight-js-contracts";
-import { CoinInfo as ContractCoinInfo, Contract, createTweetPrivateState, ledger, TweetPrivateState, witnesses, Witnesses } from "./src";
-import { MidnightProvider, MidnightProviders, WalletProvider, type UnbalancedTransaction,
-  createBalancedTx,
-  type BalancedTransaction,
-  PrivateStateId } from "@midnight-ntwrk/midnight-js-types";
+import { CoinInfo as ContractCoinInfo, Contract, ledger, Witnesses } from "./managed/tweet/contract/index.cjs";
+import { createTweetPrivateState, TweetPrivateState, witnesses } from "./index.js"
+import {
+    MidnightProvider, MidnightProviders, WalletProvider, type UnbalancedTransaction,
+    createBalancedTx,
+    type BalancedTransaction,
+    PrivateStateId
+} from "@midnight-ntwrk/midnight-js-types";
 import { filter, firstValueFrom, map, pipe, tap, throttleTime } from "rxjs";
 import { createInterface, Interface } from "node:readline/promises";
 import { cwd, stdin as input, stdout as output } from "node:process";
-import { CREATE_WALLET_CHOICE, DEPLOY_OR_JOIN_QUESTION } from "./userChoices";
+import { CREATE_WALLET_CHOICE, DEPLOY_OR_JOIN_QUESTION } from "./userChoices.js";
 import { WalletBuilder } from "@midnight-ntwrk/wallet";
 import { nativeToken, Transaction as ZswapTransaction } from "@midnight-ntwrk/zswap";
 import path from "node:path";
 import fs from "node:fs";
-import { fromHex } from "@midnight-ntwrk/midnight-js-utils";
-import { decode, encode } from "node:punycode";
 import { encodeTokenType } from "@midnight-ntwrk/compact-runtime";
-import {levelPrivateStateProvider} from "@midnight-ntwrk/midnight-js-level-private-state-provider";
-import {getZswapNetworkId, setNetworkId, NetworkId, getLedgerNetworkId} from "@midnight-ntwrk/midnight-js-network-id";
-import {indexerPublicDataProvider} from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
-import {httpClientProofProvider} from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
-import {NodeZkConfigProvider} from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
-import {Transaction, type TransactionId, CoinInfo} from "@midnight-ntwrk/ledger";
+import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-private-state-provider";
+import { getZswapNetworkId, setNetworkId, NetworkId, getLedgerNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
+import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-public-data-provider";
+import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
+import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
+import { Transaction, type TransactionId, CoinInfo } from "@midnight-ntwrk/ledger";
 setNetworkId(NetworkId.TestNet);
 
 /** Type Definitions */
@@ -37,12 +38,13 @@ export type WalletConfig = {
 }
 export type WalletResourceType = Awaited<ReturnType<typeof WalletBuilder.build>>
 
-export function coin(amount: number): ContractCoinInfo{
+export function coin(amount: number): ContractCoinInfo {
     return {
-    nonce: getRandomBytes(32),
-    value: BigInt(1_000_000),
-    color: encodeTokenType(nativeToken())
-}}
+        nonce: getRandomBytes(32),
+        value: BigInt(amount * 1_000_000),
+        color: encodeTokenType(nativeToken())
+    }
+}
 
 export const TweetContractInstance = new Contract<TweetPrivateState>(witnesses);
 export const privateStateId = "tweet_ps";
@@ -162,7 +164,12 @@ async function buildWalletAndWaitForFunds(walletConfig: WalletConfig, seed: stri
             "error",
             true
         )
-
+        const newSerializedState = await wallet.serializeState()
+        fs.writeFile(walletSerializationPath, newSerializedState, (error) => {
+            if (error) {
+                console.error(error);
+            }
+        })
         wallet.start();
     }
 
@@ -177,7 +184,7 @@ async function buildWalletAndWaitForFunds(walletConfig: WalletConfig, seed: stri
 
     console.log("Your wallet address is: ", walletState.address);
     console.log("Your wallet coin public key is: ", walletState.coinPublicKey);
-    console.log(`Your wallet balance is: ${balance && balance?.value > 0n ? balance : 0n}`);
+    console.log(`Your wallet balance is: ${balance && balance?.value > 0n ? balance.value : 0n}`);
 
     return wallet;
 }
@@ -187,8 +194,8 @@ async function waitForWalletToSync(wallet: WalletResourceType) {
         wallet.state().pipe(
             throttleTime(5000),
             tap((state) => {
-                const sourceGap = state.syncProgress?.lag.sourceGap;
-                const applyGap = state.syncProgress?.lag.applyGap;
+                const sourceGap = state.syncProgress?.lag.sourceGap ?? 0n;
+                const applyGap = state.syncProgress?.lag.applyGap ?? 0n;
                 console.log(`Waiting for wallet backend to sync. Source gap ${sourceGap} & apply gap is ${applyGap}`)
             }),
             filter((state) => {
@@ -225,7 +232,7 @@ export async function buildWallet(config: WalletConfig, rli: Interface): Promise
             return await buildWalletAndWaitForFunds(config, uintArrayToStr(getRandomBytes(32)));
         }
         case "2": {
-            const seed = await rli.question(`🌱Enter wallet seed: `);
+            const seed = await rli.question(`🌱 Enter wallet seed: `);
             resumeAfterInvalidInput(seed, rli, "Invalid seed length provided")
             return await buildWalletAndWaitForFunds(config, seed);
         }
@@ -296,7 +303,7 @@ export async function circuitMainLoop(providers: TweetContractProviders, rli: In
             console.log("=========================================================================");
 
             try {
-                await tweetAPI.callTx.deleteTweet(strToUintArray(tweetId)) ;
+                await tweetAPI.callTx.deleteTweet(strToUintArray(tweetId));
                 console.log("=========================================================================");
                 console.log(`==================== DELETED TWEET SUCCESSFULLY ✅ =========================`)
                 console.log("=========================================================================");
@@ -316,7 +323,7 @@ export async function circuitMainLoop(providers: TweetContractProviders, rli: In
             console.log("=========================================================================");
 
             try {
-                await tweetAPI.callTx.withdrawTweetEarnings(strToUintArray(tweetId)) ;
+                await tweetAPI.callTx.withdrawTweetEarnings(strToUintArray(tweetId));
                 console.log("=========================================================================");
                 console.log(`==================== WITHDREW TWEET EARNINGS SUCCESSFULLY ✅ =========================`)
                 console.log("=========================================================================");
@@ -336,7 +343,7 @@ export async function circuitMainLoop(providers: TweetContractProviders, rli: In
             console.log("=========================================================================");
 
             try {
-                await tweetAPI.callTx.likeTweet(strToUintArray(tweetId), coin(1)) ;
+                await tweetAPI.callTx.likeTweet(strToUintArray(tweetId), coin(1));
                 console.log("=========================================================================");
                 console.log(`==================== LIKED TWEET SUCCESSFULLY ✅ =====================`)
                 console.log("=========================================================================");
@@ -356,7 +363,7 @@ export async function circuitMainLoop(providers: TweetContractProviders, rli: In
             console.log("=========================================================================");
 
             try {
-                await tweetAPI.callTx.unlikeTweet(strToUintArray(tweetId)) ;
+                await tweetAPI.callTx.unlikeTweet(strToUintArray(tweetId));
                 console.log("=========================================================================");
                 console.log(`==================== UNLIKE TWEET SUCCESSFULLY ✅ =====================`)
                 console.log("=========================================================================");
@@ -376,7 +383,7 @@ export async function circuitMainLoop(providers: TweetContractProviders, rli: In
             console.log("=========================================================================");
 
             try {
-                await tweetAPI.callTx.promoteTweet(strToUintArray(tweetId), coin(5)) ;
+                await tweetAPI.callTx.promoteTweet(strToUintArray(tweetId), coin(5));
                 console.log("=========================================================================");
                 console.log(`==================== PROMOTED TWEET SUCCESSFULLY ✅ =====================`)
                 console.log("=========================================================================");
@@ -409,51 +416,51 @@ export function resumeAfterInvalidInput(str: string, rli: Interface, errMsg: str
 }
 
 export function strToUintArray(str: string) {
-        const encoder = new TextEncoder();
-        const encodedStr = encoder.encode(str);
-        return encodedStr;
+    const encoder = new TextEncoder();
+    const encodedStr = encoder.encode(str);
+    return encodedStr;
 }
 
 export function uintArrayToStr(array: Uint8Array) {
-        const decoder = new TextDecoder();
-        const decodedStr = decoder.decode(array);
-        return decodedStr;
+    const decoder = new TextDecoder();
+    const decodedStr = decoder.decode(array);
+    return decodedStr;
 }
 
-export async function createWalletAndMinghtProvider(wallet: WalletResourceType): Promise<WalletProvider & MidnightProvider>{
+export async function createWalletAndMinghtProvider(wallet: WalletResourceType): Promise<WalletProvider & MidnightProvider> {
     const walletState = await firstValueFrom(wallet.state());
 
     return {
         coinPublicKey: walletState.coinPublicKey,
         encryptionPublicKey: walletState.encryptionPublicKey,
-        submitTx(tx: BalancedTransaction): Promise<TransactionId>{
+        submitTx(tx: BalancedTransaction): Promise<TransactionId> {
             return wallet.submitTransaction(tx)
         },
         balanceTx(tx: UnbalancedTransaction, newCoins: CoinInfo[]): Promise<BalancedTransaction> {
             return wallet
-        .balanceTransaction(
-          ZswapTransaction.deserialize(tx.serialize(getLedgerNetworkId()), getZswapNetworkId()),
-          newCoins,
-        )
-        .then((tx) => wallet.proveTransaction(tx))
-        .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getZswapNetworkId()), getLedgerNetworkId()))
-        .then(createBalancedTx);
+                .balanceTransaction(
+                    ZswapTransaction.deserialize(tx.serialize(getLedgerNetworkId()), getZswapNetworkId()),
+                    newCoins,
+                )
+                .then((tx) => wallet.proveTransaction(tx))
+                .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getZswapNetworkId()), getLedgerNetworkId()))
+                .then(createBalancedTx);
         }
     }
 }
 
 
-async function runDapp(){
+async function runDapp() {
     const rli = createInterface({
         input,
         output,
         terminal: true
     });
 
-    const zkConfigPath = path.resolve(cwd(), "managed", "tweet", "keys");
+    const zkConfigPath = path.resolve(cwd(), "dist", "managed", "tweet");
 
     const walletConfig: WalletConfig = {
-        indexerUri:"https://indexer.testnet-02.midnight.network/api/v1/graphql",
+        indexerUri: "https://indexer.testnet-02.midnight.network/api/v1/graphql",
         indexerWsUri: "wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws",
         substrateNodeUri: "https://rpc.testnet-02.midnight.network",
         proverServerUri: "http://127.0.0.1:6300"
