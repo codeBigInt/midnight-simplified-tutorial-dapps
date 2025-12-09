@@ -1,8 +1,9 @@
 node_modules
 dist
 managed
-midnight_db_levels
+midnight_level_db
 logs
+wallet-sync-state.txt
 
 .env
 .env.**
