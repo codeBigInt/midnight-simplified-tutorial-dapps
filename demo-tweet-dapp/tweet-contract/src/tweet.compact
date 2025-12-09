@@ -2,7 +2,7 @@ pragma language_version >= 0.17.0;
 import CompactStandardLibrary;
 import Helpers;
 
-export {TVL};
+export {TVL, QualifiedCoinInfo, CoinInfo};
 
 export struct Tweet {
     createdAt: Uint<64>;
