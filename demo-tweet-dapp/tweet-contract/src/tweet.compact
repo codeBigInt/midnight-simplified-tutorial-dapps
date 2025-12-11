@@ -9,7 +9,7 @@ export struct Tweet {
     updateAt: Uint<64>;
     owner: Bytes<32>;
     tweet: Opaque<"string">;
-    likes: Field;
+    likes:  Uint<64>;
     promoted: Boolean;
 }
 
@@ -73,9 +73,9 @@ export circuit deleteTweet(tweetId: Bytes<32>): []{
     const owner = generatePk(disclose(getSecretKey()));
     assert (owner == tweet.owner, "You are not the owner");
     
-    if((tweet.likes as Uint<64>) > likePaymentThreshold){
-        const earnings = (tweet.likes as Uint<64>) * 1000000;
-        SendFundAndManageChange(earnings as Uint<128>, ownPublicKey());
+    if(tweet.likes >= likePaymentThreshold){
+        const earnings = tweet.likes * 1000000;
+        SendFundAndManageChange(earnings as Uint<128>, ownPublicKey().bytes);
         tweets.remove(disclosedTweetId);
     }else{
         tweets.remove(disclosedTweetId);
@@ -96,7 +96,7 @@ export circuit promoteTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
 
     assert (coin.value >= expectedFee, "Insufficient fund provided for promotion");
 
-    SendFundImmediately(disclosedCoin.value, promotionPaymentCpk, disclosedCoin);
+    SendFundImmediately(disclosedCoin.value, promotionPaymentCpk.bytes, disclosedCoin);
 
     const updatedTweet = Tweet {
         ...tweet,
@@ -115,7 +115,7 @@ export circuit withdrawTweetEarnings(tweetId: Bytes<32>): []{
     assert ((tweet.likes as Uint<64>) > likePaymentThreshold, "Below withdrawal threshold");
     
     const earnings = (tweet.likes as Uint<64>) * 1000000;
-    SendFundAndManageChange(earnings as Uint<128>, ownPublicKey());
+    SendFundAndManageChange(earnings as Uint<128>, ownPublicKey().bytes);
 
     const updatedTweet = Tweet {
         ...tweet,
@@ -143,7 +143,7 @@ export circuit likeTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
 
     const updatedTweet = Tweet {
         ...tweet,
-        likes: tweet.likes + 1
+        likes: (tweet.likes + 1) as Uint<64>
     };
 
     tweets.insert(disclosedTweetId, updatedTweet);
@@ -158,7 +158,7 @@ export circuit unlikeTweet(tweetId: Bytes<32>): []{
     const path = disclose(findLiker(likeCommit));
 
     assert (likers.checkRoot(merkleTreePathRoot<100, Bytes<32>>(path)), "You didn't like this tweet");
-    SendFundAndManageChange(1000000, ownPublicKey());
+    SendFundAndManageChange(1000000, ownPublicKey().bytes);
 
     const updatedTweet = Tweet {
         ...tweet,

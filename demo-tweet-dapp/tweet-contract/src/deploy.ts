@@ -10,7 +10,7 @@ import {
 import { filter, firstValueFrom, map, pipe, tap, throttleTime } from "rxjs";
 import { createInterface, Interface } from "node:readline/promises";
 import { cwd, stdin as input, stdout as output } from "node:process";
-import { CREATE_WALLET_CHOICE, DEPLOY_OR_JOIN_QUESTION } from "./userChoices.js";
+import { CIRCUIT_INTERACTION_QUESTION, CREATE_WALLET_CHOICE, DEPLOY_OR_JOIN_QUESTION } from "./userChoices.js";
 import { WalletBuilder } from "@midnight-ntwrk/wallet";
 import { nativeToken, Transaction as ZswapTransaction } from "@midnight-ntwrk/zswap";
 import path from "node:path";
@@ -22,6 +22,7 @@ import { indexerPublicDataProvider } from "@midnight-ntwrk/midnight-js-indexer-p
 import { httpClientProofProvider } from "@midnight-ntwrk/midnight-js-http-client-proof-provider";
 import { NodeZkConfigProvider } from "@midnight-ntwrk/midnight-js-node-zk-config-provider";
 import { Transaction, type TransactionId, CoinInfo } from "@midnight-ntwrk/ledger";
+import { fromHex, toHex } from "@midnight-ntwrk/midnight-js-utils";
 setNetworkId(NetworkId.TestNet);
 
 /** Type Definitions */
@@ -53,7 +54,7 @@ export async function deployTweetContract(providers: TweetContractProviders): Pr
     console.log("===========================================================================================")
     console.log(`========================== DEPLOYING CONTRACT 🔃 ==========================================`)
     console.log("============================================================================================")
-    const deplyedContract = deployContract<TweetContract>(providers, {
+    const deplyedContract = await deployContract<TweetContract>(providers, {
         contract: TweetContractInstance,
         initialPrivateState: await getPrivateState(providers),
         privateStateId
@@ -70,7 +71,7 @@ export async function joinTweetContract(providers: TweetContractProviders, contr
     console.log(`========================== JOINING CONTRACT 🔃 ==================================================`)
     console.log("===================================================================================================")
 
-    const foundContract = findDeployedContract<TweetContract>(providers, {
+    const foundContract = await findDeployedContract<TweetContract>(providers, {
         contract: TweetContractInstance,
         contractAddress,
         initialPrivateState: await getPrivateState(providers),
@@ -91,22 +92,33 @@ export function getRandomBytes(length: number) {
 };
 
 export async function getPrivateState(providers: TweetContractProviders): Promise<TweetPrivateState> {
+    console.log("==============================================================================")
+    console.log(`======================================= PRIVATE STATE ✅ =======================`);
+    console.log("==============================================================================")
     const exisitingPrivateState = await providers.privateStateProvider.get(privateStateId);
+    console.log(`Your current private state:`, exisitingPrivateState)
     return exisitingPrivateState ?? createTweetPrivateState(getRandomBytes(32))
 };
 
 export async function getPublicLedgerState(providers: TweetContractProviders, contractAddress: string) {
     const ledgerState = await providers.publicDataProvider.queryContractState(contractAddress)
         .then((state) => state != null ? ledger(state.data) : null);
-
+    if(ledgerState == null){
+        console.error("Contract state is undefined. Failed to fetch. Please try again");
+        return;
+    };
     console.log("==============================================================================")
     console.log(`======================================= CONTRACT STATE ✅ =======================`);
     console.log("==============================================================================")
 
-    console.log("Onchain tweets incudes", ledgerState?.tweets)
-    console.log("Onchain liker incudes", ledgerState?.likers)
-    console.log("Engagement payment threshold", ledgerState?.likePaymentThreshold)
-    console.log("SocialFi TVL locked", ledgerState?.TVL.value)
+    console.log("Onchain tweets incudes", Array.from(ledgerState.tweets).map(([key, tweet]) => ({
+        id: toHex(key),
+        tweet 
+    })))
+    console.log("Tweet count: ", ledgerState.tweets.size())
+    console.log("Onchain liker incudes", ledgerState.likers)
+    console.log("Engagement payment threshold", ledgerState.likePaymentThreshold)
+    console.log("SocialFi TVL locked", ledgerState.TVL.value)
 
     console.log("==============================================================================")
     console.log(`======================================= END OF CONTRACT STATE 🔚 =======================`);
@@ -252,159 +264,143 @@ export async function circuitMainLoop(providers: TweetContractProviders, rli: In
         rli.resume();
     }
 
-    const userChoice = await rli.question(CREATE_WALLET_CHOICE);
-    switch (userChoice) {
-        case "1": {
-            const newTweetId = getRandomBytes(32);
-            const tweet = await rli.question(`What's on your mind today?😊 `);
-            resumeAfterInvalidInput(tweet, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== CREATING TWEET WITH ID: ${uintArrayToStr(newTweetId)}================`)
-            console.log("=========================================================================");
+    try {
+        while (true) {
+            const userChoice = await rli.question(CIRCUIT_INTERACTION_QUESTION);
+            switch (userChoice) {
+                case "1": {
+                    const newTweetId = getRandomBytes(32);
+                    const tweet = await rli.question(`What's on your mind today?😊 `);
+                    resumeAfterInvalidInput(tweet, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== CREATING TWEET WITH ID: ${toHex(newTweetId)}================`)
+                    console.log("=========================================================================");
 
-            try {
-                await tweetAPI.callTx.createTweet(newTweetId, tweet);
-                console.log("=========================================================================");
-                console.log(`==================== CREATED TWEET SUCCESSFULLY =========================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
+
+                    await tweetAPI.callTx.createTweet(newTweetId, tweet);
+                    console.log("=========================================================================");
+                    console.log(`==================== CREATED TWEET SUCCESSFULLY ✅ =========================`)
+                    console.log("=========================================================================");
+                    break;
+
+                }
+                case "2": {
+                    const tweetId = await rli.question(`Enter tweet ID? `);
+                    const updatedTweet = await rli.question(`Edit tweet message? `);
+
+                    resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== UPDATING TWEET WITH ID: ${tweetId} =================`)
+                    console.log("=========================================================================");
+
+
+                    await tweetAPI.callTx.updateTweet(fromHex(tweetId), updatedTweet);
+                    console.log("=========================================================================");
+                    console.log(`==================== UPDATED TWEET SUCCESSFULLY ✅ =========================`)
+                    console.log("=========================================================================");
+                    break;
+
+                }
+
+                case "3": {
+                    const tweetId = await rli.question(`Enter tweet ID? `);
+
+                    resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== DELETING TWEET WITH ID: ${tweetId} =================`)
+                    console.log("=========================================================================");
+
+
+                    await tweetAPI.callTx.deleteTweet(fromHex(tweetId));
+                    console.log("=========================================================================");
+                    console.log(`==================== DELETED TWEET SUCCESSFULLY ✅ =========================`)
+                    console.log("=========================================================================");
+                    break;
+
+                }
+
+                case "4": {
+                    const tweetId = await rli.question(`Enter tweet ID? `);
+
+                    resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== WITHDRAWING TWEET EARNINGS WITH ID: ${tweetId} =================`)
+                    console.log("=========================================================================");
+
+
+                    await tweetAPI.callTx.withdrawTweetEarnings(fromHex(tweetId));
+                    console.log("=========================================================================");
+                    console.log(`==================== WITHDREW TWEET EARNINGS SUCCESSFULLY ✅ =========================`)
+                    console.log("=========================================================================");
+                    break;
+
+                }
+
+                case "5": {
+                    const tweetId = await rli.question(`Enter tweet ID? `);
+
+                    resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== ENGAGING TWEET WITH ID (LIKE): ${tweetId} =================`)
+                    console.log("=========================================================================");
+
+
+                    await tweetAPI.callTx.likeTweet(fromHex(tweetId), coin(1));
+                    console.log("=========================================================================");
+                    console.log(`==================== LIKED TWEET SUCCESSFULLY ✅ =====================`)
+                    console.log("=========================================================================");
+                    break;
+
+                }
+
+                case "6": {
+                    const tweetId = await rli.question(`Enter tweet ID? `);
+
+                    resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== ENGAGING TWEET WITH ID (UNLIKE): ${tweetId} =================`)
+                    console.log("=========================================================================");
+
+
+                    await tweetAPI.callTx.unlikeTweet(fromHex(tweetId));
+                    console.log("=========================================================================");
+                    console.log(`==================== UNLIKE TWEET SUCCESSFULLY ✅ =====================`)
+                    console.log("=========================================================================");
+                    break;
+
+                }
+
+                case "7": {
+                    const tweetId = await rli.question(`Enter tweet ID? `);
+
+                    resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
+                    console.log("=========================================================================");
+                    console.log(`==================== PROMOTING TWEET WITH ID: ${tweetId} =================`)
+                    console.log("=========================================================================");
+
+
+                    await tweetAPI.callTx.promoteTweet(fromHex(tweetId), coin(5));
+                    console.log("=========================================================================");
+                    console.log(`==================== PROMOTED TWEET SUCCESSFULLY ✅ =====================`)
+                    console.log("=========================================================================");
+                    break;
+                }
+                case "8": {
+                    await getPublicLedgerState(providers, tweetAPI.deployTxData.public.contractAddress);
+                    break;
+                }
+                case "9": {
+                    await getPrivateState(providers);
+                    break;
+                }
+
+                default: {
+                    throw Error("Invalid choice 😒");
+                }
             }
-            break;
-
         }
-        case "2": {
-            const tweetId = await rli.question(`Enter tweet ID? `);
-            const updatedTweet = await rli.question(`Edit tweet message? `);
-
-            resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== UPDATING TWEET WITH ID: ${tweetId} =================`)
-            console.log("=========================================================================");
-
-            try {
-                await tweetAPI.callTx.updateTweet(strToUintArray(tweetId), updatedTweet);
-                console.log("=========================================================================");
-                console.log(`==================== UPDATED TWEET SUCCESSFULLY ✅ =========================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
-            }
-            break;
-
-        }
-
-        case "3": {
-            const tweetId = await rli.question(`Enter tweet ID? `);
-
-            resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== DELETING TWEET WITH ID: ${tweetId} =================`)
-            console.log("=========================================================================");
-
-            try {
-                await tweetAPI.callTx.deleteTweet(strToUintArray(tweetId));
-                console.log("=========================================================================");
-                console.log(`==================== DELETED TWEET SUCCESSFULLY ✅ =========================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
-            }
-            break;
-
-        }
-
-        case "4": {
-            const tweetId = await rli.question(`Enter tweet ID? `);
-
-            resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== WITHDRAWING TWEET EARNINGS WITH ID: ${tweetId} =================`)
-            console.log("=========================================================================");
-
-            try {
-                await tweetAPI.callTx.withdrawTweetEarnings(strToUintArray(tweetId));
-                console.log("=========================================================================");
-                console.log(`==================== WITHDREW TWEET EARNINGS SUCCESSFULLY ✅ =========================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
-            }
-            break;
-
-        }
-
-        case "5": {
-            const tweetId = await rli.question(`Enter tweet ID? `);
-
-            resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== ENGAGING TWEET WITH ID (LIKE): ${tweetId} =================`)
-            console.log("=========================================================================");
-
-            try {
-                await tweetAPI.callTx.likeTweet(strToUintArray(tweetId), coin(1));
-                console.log("=========================================================================");
-                console.log(`==================== LIKED TWEET SUCCESSFULLY ✅ =====================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
-            }
-            break;
-
-        }
-
-        case "6": {
-            const tweetId = await rli.question(`Enter tweet ID? `);
-
-            resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== ENGAGING TWEET WITH ID (UNLIKE): ${tweetId} =================`)
-            console.log("=========================================================================");
-
-            try {
-                await tweetAPI.callTx.unlikeTweet(strToUintArray(tweetId));
-                console.log("=========================================================================");
-                console.log(`==================== UNLIKE TWEET SUCCESSFULLY ✅ =====================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
-            }
-            break;
-
-        }
-
-        case "7": {
-            const tweetId = await rli.question(`Enter tweet ID? `);
-
-            resumeAfterInvalidInput(tweetId, rli, "Invalid tweet length");
-            console.log("=========================================================================");
-            console.log(`==================== PROMOTING TWEET WITH ID: ${tweetId} =================`)
-            console.log("=========================================================================");
-
-            try {
-                await tweetAPI.callTx.promoteTweet(strToUintArray(tweetId), coin(5));
-                console.log("=========================================================================");
-                console.log(`==================== PROMOTED TWEET SUCCESSFULLY ✅ =====================`)
-                console.log("=========================================================================");
-            } catch (error) {
-                console.error(error);
-            }
-            break;
-        }
-        case "8": {
-            await getPublicLedgerState(providers, tweetAPI.deployTxData.public.contractAddress);
-            break;
-        }
-        case "9": {
-            await getPrivateState(providers);
-            break;
-        }
-
-        default: {
-            rli.resume();
-            throw Error("Invalid choice");
-        }
+    } catch (error) {
+        console.error(error);
     }
 }
 
@@ -463,7 +459,7 @@ async function runDapp() {
         indexerUri: "https://indexer.testnet-02.midnight.network/api/v1/graphql",
         indexerWsUri: "wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws",
         substrateNodeUri: "https://rpc.testnet-02.midnight.network",
-        proverServerUri: "http://127.0.0.1:6300"
+        proverServerUri: "http://midnight-proof-server-alb-1996898234.eu-north-1.elb.amazonaws.com:6300/"
 
     };
     const wallet = await buildWallet(walletConfig, rli)

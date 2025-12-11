@@ -15,8 +15,10 @@ module Helpers{
         ));
     }
     
-    export circuit SendFundAndManageChange(amt: Uint<128>, to: ZswapCoinPublicKey): [] {
-        const sendResult = send(TVL, left<ZswapCoinPublicKey, ContractAddress>(to), amt);
+    export circuit SendFundAndManageChange(amt: Uint<128>, receiver: Bytes<32>): [] {
+        const sendResult = send(TVL, left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{
+            bytes: receiver
+        }), amt);
 
         if(sendResult.change.is_some){
             TVL.writeCoin(sendResult.change.value, right<ZswapCoinPublicKey, ContractAddress>(
@@ -27,10 +29,12 @@ module Helpers{
         }
     }
 
-    export circuit SendFundImmediately(amt: Uint<128>, to: ZswapCoinPublicKey, disclosedCoin: CoinInfo): [] {
+    export circuit SendFundImmediately(amt: Uint<128>, receiver: Bytes<32>, disclosedCoin: CoinInfo): [] {
         /** Recieves coin into the contract */
         receive(disclosedCoin);
         
-        sendImmediate(disclosedCoin, left<ZswapCoinPublicKey, ContractAddress>(to), amt);
+        sendImmediate(disclosedCoin, left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{
+            bytes: receiver
+        }), amt);
     }
 }
