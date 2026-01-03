@@ -7,9 +7,8 @@ export const DEPLOY_OR_JOIN_QUESTION = `
 
 export const CREATE_WALLET_CHOICE = `
     1. Build a fresh wallet
-    2. Build wallet from seed (Ensure you have the wallet seed)
+    2. Build wallet from mnemonic passphrase (24 words)
     3. Exit CLI DApp? (Please specify using the number for the correspoding action you wanna perform):
-
 `;
 
 export const CIRCUIT_INTERACTION_QUESTION = `

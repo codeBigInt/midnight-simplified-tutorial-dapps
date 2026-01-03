@@ -2,11 +2,11 @@ module Helpers{
     import CompactStandardLibrary;
     export {TVL, ReceiveFundAndAddToTVL, SendFundAndManageChange, SendFundImmediately};
 
-    ledger TVL: QualifiedCoinInfo;
+    ledger TVL: QualifiedShieldedCoinInfo;
 
-    export circuit ReceiveFundAndAddToTVL(disclosedCoin: CoinInfo): [] {
+    export circuit ReceiveFundAndAddToTVL(disclosedCoin: ShieldedCoinInfo): [] {
         /** Recieves coin into the contract */
-        receive(disclosedCoin);
+        receiveShielded(disclosedCoin);
 
         const coinToInsert = TVL.value > 0 ? mergeCoinImmediate(TVL, disclosedCoin) : disclosedCoin;
 
@@ -16,7 +16,7 @@ module Helpers{
     }
     
     export circuit SendFundAndManageChange(amt: Uint<128>, receiver: Bytes<32>): [] {
-        const sendResult = send(TVL, left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{
+        const sendResult = sendShielded(TVL, left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{
             bytes: receiver
         }), amt);
 
@@ -29,11 +29,11 @@ module Helpers{
         }
     }
 
-    export circuit SendFundImmediately(amt: Uint<128>, receiver: Bytes<32>, disclosedCoin: CoinInfo): [] {
+    export circuit SendFundImmediately(amt: Uint<128>, receiver: Bytes<32>, disclosedCoin: ShieldedCoinInfo): [] {
         /** Recieves coin into the contract */
-        receive(disclosedCoin);
+        receiveShielded(disclosedCoin);
         
-        sendImmediate(disclosedCoin, left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{
+        sendImmediateShielded(disclosedCoin, left<ZswapCoinPublicKey, ContractAddress>(ZswapCoinPublicKey{
             bytes: receiver
         }), amt);
     }

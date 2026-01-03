@@ -1,8 +1,8 @@
-pragma language_version >= 0.17.0;
+pragma language_version >= 0.19.0;
 import CompactStandardLibrary;
 import Helpers;
 
-export {TVL, QualifiedCoinInfo, CoinInfo};
+export {TVL, QualifiedShieldedCoinInfo, ShieldedCoinInfo};
 
 export struct Tweet {
     createdAt: Uint<64>;
@@ -14,7 +14,7 @@ export struct Tweet {
 }
 
 export ledger tweets: Map<Bytes<32>, Tweet>; /** Tracks tweets created onchain and its details */
-export ledger likers: MerkleTree<100, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
+export ledger likers: MerkleTree<32, Bytes<32>>; /** Tracks likes anonymously for fund reversal purposes */
 export sealed ledger promotionPaymentCpk: ZswapCoinPublicKey; /** Stores address to send promotional funds */
 export sealed ledger likePaymentThreshold: Uint<128>;
 
@@ -82,7 +82,7 @@ export circuit deleteTweet(tweetId: Bytes<32>): []{
     }
 }
 
-export circuit promoteTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
+export circuit promoteTweet(tweetId: Bytes<32>, coin: ShieldedCoinInfo): []{
     const disclosedTweetId = disclose(tweetId);
     const disclosedCoin = disclose(coin);
 
@@ -126,7 +126,7 @@ export circuit withdrawTweetEarnings(tweetId: Bytes<32>): []{
 }
 
 /** For Viewers and tweet engagement */
-export circuit likeTweet(tweetId: Bytes<32>, coin: CoinInfo): []{
+export circuit likeTweet(tweetId: Bytes<32>, coin: ShieldedCoinInfo): []{
     const disclosedTweetId = disclose(tweetId);
     const disclosedCoin = disclose(coin);
 

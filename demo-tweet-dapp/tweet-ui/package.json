@@ -1,0 +1,37 @@
+{
+  "name": "tweet-ui",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/dapp-connector-api": "^3.0.0",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "^2.1.0",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "^2.1.0",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "^2.1.0",
+    "@midnight-ntwrk/midnight-js-testing": "^2.0.2",
+    "@midnight-ntwrk/midnight-js-types": "^2.1.0",
+    "@midnight-ntwrk/midnight-js-utils": "^2.1.0",
+    "@midnight-ntwrk/wallet": "^5.0.0",
+    "@midnight-ntwrk/wallet-api": "^5.0.0",
+    "@midnight-ntwrk/wallet-sdk-address-format": "^2.0.0",
+    "@midnight-ntwrk/zswap": "^4.0.0",
+    "next": "16.0.3",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.0.3",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
