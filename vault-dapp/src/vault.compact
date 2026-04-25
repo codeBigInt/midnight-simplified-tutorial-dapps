@@ -74,6 +74,8 @@ export circuit withdraw(_amount: Uint<128>): []{
     assert (vaults.member(userId), "You have no vault position");
 
     const vault = vaults.lookup(userId);
+    assert (vault.balance >= amount, "Insufficient vault balance");
+
     const balanceToSendFrom = balances.lookup(vault.coinColor);
     
     const sendResult = sendShielded(
@@ -91,6 +93,13 @@ export circuit withdraw(_amount: Uint<128>): []{
     }else{
         balances.remove(vault.coinColor);
     }
+
+    const updatedVault = Vault {
+        ...vault,
+        balance: (vault.balance - amount) as Uint<128>
+    };
+
+    vaults.insert(userId, updatedVault);
 }
 
 circuit generateUserId(sk: Bytes<32>): Bytes<32>{

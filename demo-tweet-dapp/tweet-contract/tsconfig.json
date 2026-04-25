@@ -1,26 +1,29 @@
 {
-  "include": ["src/**/*.ts", "*.ts"],
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"],
   "compilerOptions": {
+    "rootDir": "./src",
     "outDir": "./dist",
     "declaration": true,
     "declarationMap": true,
-    "lib": ["ESNext"],
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "node",
+    "sourceMap": true,
     "allowJs": true,
+
+    "lib": ["ES2022"],
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "types": ["node"],
+
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "strict": true,
     "isolatedModules": true,
-    "sourceMap": true,
     "resolveJsonModule": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "baseUrl": ".",
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
-    "jsx": "react-jsx",
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force"
   }
