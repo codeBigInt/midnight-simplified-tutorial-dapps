@@ -1,0 +1,101 @@
+pragma language_version >= 0.22.0;
+import CompactStandardLibrary;
+
+export struct Vault {
+    balance: Uint<128>;
+    createdAt: Uint<64>;
+    coinColor: Bytes<32>;
+}
+
+export ledger vaults: Map<Bytes<32>, Vault>;
+export ledger balances: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
+
+witness getSecretKey(): Bytes<32>;
+witness getCurrentTime(): Uint<64>;
+
+
+export circuit createVault(
+    _color: Bytes<32>
+): []{
+    const newUserId = generateUserId(disclose(getSecretKey()));
+
+    assert (!vaults.member(newUserId), "Already exist");
+
+    const emptyVault = Vault {
+        balance: 0,
+        coinColor: disclose(_color),
+        createdAt: disclose(getCurrentTime())
+    };
+
+    vaults.insert(newUserId, emptyVault);
+}
+
+export circuit deposit(
+    _coin: ShieldedCoinInfo
+): []{
+    const coin = disclose(_coin);
+    const userId = generateUserId(disclose(getSecretKey()));
+
+    assert (vaults.member(userId), "You have no vault position");
+    const vault = vaults.lookup(userId);
+
+    assert (coin.color == vault.coinColor, "Invalid coin type deposited");
+
+    receiveShielded(coin);
+
+    if(balances.member(coin.color)){
+        const prevBalance = balances.lookup(coin.color);
+        const newBalance = mergeCoinImmediate(prevBalance, coin);
+
+        balances.insertCoin(
+            coin.color,
+            newBalance,
+            right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+        );
+    }else{
+        balances.insertCoin(
+           coin.color,
+           coin,
+           right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+        );
+    }
+
+    const updatedVault = Vault {
+        ...vault,
+        balance: (vault.balance + coin.value) as Uint<128>
+    };
+
+    vaults.insert(userId, updatedVault);
+}
+
+export circuit withdraw(_amount: Uint<128>): []{
+    const amount = disclose(_amount);
+    const userId = generateUserId(disclose(getSecretKey()));
+    assert (vaults.member(userId), "You have no vault position");
+
+    const vault = vaults.lookup(userId);
+    const balanceToSendFrom = balances.lookup(vault.coinColor);
+    
+    const sendResult = sendShielded(
+        balanceToSendFrom,
+        left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey()),
+        amount
+    );
+
+    if(sendResult.change.is_some){
+        balances.insertCoin(
+            vault.coinColor,
+            sendResult.change.value,
+            right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+        );
+    }else{
+        balances.remove(vault.coinColor);
+    }
+}
+
+circuit generateUserId(sk: Bytes<32>): Bytes<32>{
+    return persistentHash<Vector<2, Bytes<32>>>([
+        pad(32, "vaul:user"),
+        sk
+    ]);
+}

@@ -1,0 +1,16 @@
+{
+  "name": "vault-dapp",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test-compile": "compact compile --skip-zk src/vault.compact ./src/managed",
+    "compile": "compact compile src/vault.compact ./src/managed"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  }
+}
