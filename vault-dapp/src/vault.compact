@@ -1,45 +1,37 @@
-pragma language_version >= 0.22.0;
+/**
+ * Minimal Single Shielded Token Type Vault Dapp
+
+ * Key Concept demonstrated:
+ *  Structured onchain pattern for contract state management involving Maps, Struct and hashes
+ *  Shielded liquidity managment techniques using using receiveShielded and sendShielded
+ *  Risk managment for private state compromise scenario using generateOwnerCommitment and ownerHash field for ownership verification
+ *
+ * NB: In this contract individual vault balance is publicly visible onchain which is a trade-off to keep the contract minimal as the focus
+ * of this example is to demonstrate shielded token management. Usually individual shielded token balance should be kept in private state while commitments are stored onchain
+ * utilzing ADT types like Merkle trees (completely shielded and verifiable by zk proof) or Maps 
+ */
+pragma language_version 0.23.0;
 import CompactStandardLibrary;
 
 export struct Vault {
-    balance: Uint<128>;
-    createdAt: Uint<64>;
-    coinColor: Bytes<32>;
+    balance: Uint<128>; // track total amount of shielded tokens deposit
+    coinColor: Bytes<32>; // token type deposited
+    ownerHash: Bytes<32>; // commitment hash derived from private key used for verification during withdrawal 
 }
 
 export ledger vaults: Map<Bytes<32>, Vault>;
 export ledger balances: Map<Bytes<32>, QualifiedShieldedCoinInfo>;
 
 witness getSecretKey(): Bytes<32>;
-witness getCurrentTime(): Uint<64>;
 
-
-export circuit createVault(
-    _color: Bytes<32>
-): []{
-    const newUserId = generateUserId(disclose(getSecretKey()));
-
-    assert (!vaults.member(newUserId), "Already exist");
-
-    const emptyVault = Vault {
-        balance: 0,
-        coinColor: disclose(_color),
-        createdAt: disclose(getCurrentTime())
-    };
-
-    vaults.insert(newUserId, emptyVault);
-}
-
+/**
+ * Allow deposit of shielded tokens into a new/existing vault
+ * Merge the onchain shielded coin balances if it exist otherwise creates a new balance entry
+ */
 export circuit deposit(
     _coin: ShieldedCoinInfo
 ): []{
     const coin = disclose(_coin);
-    const userId = generateUserId(disclose(getSecretKey()));
-
-    assert (vaults.member(userId), "You have no vault position");
-    const vault = vaults.lookup(userId);
-
-    assert (coin.color == vault.coinColor, "Invalid coin type deposited");
 
     receiveShielded(coin);
 
@@ -60,21 +52,50 @@ export circuit deposit(
         );
     }
 
-    const updatedVault = Vault {
-        ...vault,
-        balance: (vault.balance + coin.value) as Uint<128>
-    };
+    const userId = generateUserId(disclose(getSecretKey()));
+    const hasVault = vaults.member(userId);
 
-    vaults.insert(userId, updatedVault);
+    if(!hasVault){
+        const ownerCommitmentHash = generateOwnerCommitment(ownPublicKey().bytes);
+
+        const newVault = Vault {
+            balance: coin.value,
+            coinColor: disclose(coin.color),
+            ownerHash: ownerCommitmentHash
+        };
+
+        vaults.insert(userId, newVault);
+    }else{
+        const vault = vaults.lookup(userId);
+
+        assert (coin.color == vault.coinColor, "Invalid coin type deposited");
+
+        const updatedVault = Vault {
+            ...vault,
+            balance: (vault.balance + coin.value) as Uint<128>
+        };
+
+        vaults.insert(userId, updatedVault);
+    }
 }
 
+/** 
+ * Submit a withdrawal transaction
+ * Send all or part of the deposited shielded token to the owner from their balance
+ * Authenticate the user owns the position utilizing userId and ownerHash
+ */
 export circuit withdraw(_amount: Uint<128>): []{
     const amount = disclose(_amount);
     const userId = generateUserId(disclose(getSecretKey()));
+
+    const reconstructedOwnerHash = generateOwnerCommitment(ownPublicKey().bytes);
+
     assert (vaults.member(userId), "You have no vault position");
 
     const vault = vaults.lookup(userId);
     assert (vault.balance >= amount, "Insufficient vault balance");
+
+    assert (reconstructedOwnerHash == vault.ownerHash, "Unauthorized: You are not the owner");
 
     const balanceToSendFrom = balances.lookup(vault.coinColor);
     
@@ -102,9 +123,21 @@ export circuit withdraw(_amount: Uint<128>): []{
     vaults.insert(userId, updatedVault);
 }
 
+/** Commitment hash generated from the user's secret key serving as an onchain identifier to track user balances */
 circuit generateUserId(sk: Bytes<32>): Bytes<32>{
     return persistentHash<Vector<2, Bytes<32>>>([
-        pad(32, "vaul:user"),
+        pad(32, "vault:user"),
         sk
+    ]);
+}
+
+/** Genarates owner commitment hash from the caller's public key 
+ * Prevents balance drainage when user's secrete key is compromised by attackers
+ * Important during withdrawal
+ */
+circuit generateOwnerCommitment(pk: Bytes<32>): Bytes<32>{
+    return persistentHash<Vector<2, Bytes<32>>>([
+        pad(32, "vault:owner:commitment"),
+        pk
     ]);
 }

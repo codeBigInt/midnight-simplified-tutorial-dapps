@@ -3,12 +3,12 @@ import type { Ledger } from "./managed/contract";
 
 
 export interface VaultPrivateState {
-    secreteKey: Uint8Array
+    secretKey: Uint8Array
 }
 
-export function createVaultPrivateState(secreteKey: Uint8Array): VaultPrivateState{
+export function createVaultPrivateState(secretKey: Uint8Array): VaultPrivateState{
     return {
-        secreteKey
+        secretKey
     }
 }
 
@@ -17,12 +17,6 @@ export const witnesses = {
     getSecretKey: (
         {privateState}: WitnessContext<Ledger, VaultPrivateState>
     ): [VaultPrivateState, Uint8Array] => {
-        return [privateState, privateState.secreteKey]
-    },
-
-    getCurrentTime: (
-        {privateState}: WitnessContext<Ledger, VaultPrivateState>
-    ): [VaultPrivateState, bigint] => {
-        return [privateState, BigInt(Date.now())]
-    },
+        return [privateState, privateState.secretKey]
+    }
 }

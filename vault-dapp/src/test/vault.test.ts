@@ -1,14 +1,14 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
+import { QueryContext } from "@midnight-ntwrk/compact-runtime";
 
 import type { Vault } from "../managed/contract";
 import {
+  createVaultPrivateState,
   TEST_COIN_COLOR,
-  TEST_CREATED_AT,
   VaultSimulator,
 } from "./vault-setup";
 import {
   convertLedgerMappingToArray,
-  convertUint8ArraysToStrings,
   randomBytes,
 } from "./utils";
 
@@ -37,28 +37,19 @@ const getOnlyBalance = (simulator: VaultSimulator) => {
 };
 
 describe("Vault contract", () => {
-  beforeEach(() => {
-    vi.useFakeTimers();
-    vi.setSystemTime(Number(TEST_CREATED_AT));
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("deploys with empty vault and balance ledgers", () => {
     const simulator = VaultSimulator.deployContract();
     const ledgerState = simulator.getLedgerState();
 
     expect(ledgerState.vaults.size()).toBe(0n);
     expect(ledgerState.balances.size()).toBe(0n);
-    expect(simulator.getPrivateState().secreteKey).toHaveLength(32);
+    expect(simulator.getPrivateState().secretKey).toHaveLength(32);
   });
 
-  it("creates a vault for the current secret key", () => {
+  it("creates a vault on the first valid deposit", () => {
     const simulator = VaultSimulator.deployContract();
 
-    const ledgerState = simulator.createVault();
+    const ledgerState = simulator.deposit(100n);
     const vaults = convertLedgerMappingToArray<Vault>(ledgerState.vaults);
     const [vaultEntry] = vaults;
 
@@ -67,23 +58,28 @@ describe("Vault contract", () => {
     }
 
     expect(vaults).toHaveLength(1);
-    expect(vaultEntry.item.balance).toBe(0n);
-    expect(vaultEntry.item.createdAt).toBe(TEST_CREATED_AT);
+    expect(vaultEntry.item.balance).toBe(100n);
     expect(vaultEntry.item.coinColor).toEqual(TEST_COIN_COLOR);
+    expect(vaultEntry.item.ownerHash).toHaveLength(32);
   });
 
-  it("rejects deposits before the user creates a vault", () => {
+  it("accumulates multiple deposits into the same vault", () => {
     const simulator = VaultSimulator.deployContract();
 
-    expect(() => simulator.deposit(1_000n)).toThrow(
-      "You have no vault position"
-    );
+    simulator.deposit(100n);
+    simulator.deposit(200n);
+
+    const { item: vault } = getOnlyVault(simulator);
+    const { item: balance } = getOnlyBalance(simulator);
+
+    expect(vault.balance).toBe(300n);
+    expect(balance.value).toBe(300n);
+    expect(balance.color).toEqual(TEST_COIN_COLOR);
   });
 
   it("accepts deposits for the vault coin color and accumulates balances", () => {
     const simulator = VaultSimulator.deployContract();
 
-    simulator.createVault();
     const firstDepositLedgerState = simulator.deposit(1_000n);
     const secondDepositLedgerState = simulator.deposit(500n);
 
@@ -100,7 +96,7 @@ describe("Vault contract", () => {
   it("rejects deposits with a different coin color", () => {
     const simulator = VaultSimulator.deployContract();
 
-    simulator.createVault();
+    simulator.deposit(1_000n);
 
     expect(() => simulator.deposit(1_000n, randomBytes(32))).toThrow(
       "Invalid coin type deposited"
@@ -110,7 +106,6 @@ describe("Vault contract", () => {
   it("withdraws from the vault balance", () => {
     const simulator = VaultSimulator.deployContract();
 
-    simulator.createVault();
     simulator.deposit(1_000n);
     const ledgerState = simulator.withdraw(400n);
     const { item: vault } = getOnlyVault(simulator);
@@ -124,16 +119,45 @@ describe("Vault contract", () => {
   it("removes the stored coin balance on a full withdrawal", () => {
     const simulator = VaultSimulator.deployContract();
 
-    simulator.createVault();
     simulator.deposit(1_000n);
     const ledgerState = simulator.withdraw(1_000n);
     const { item: vault } = getOnlyVault(simulator);
 
     expect(vault.balance).toBe(0n);
     expect(ledgerState.balances.size()).toBe(0n);
-    expect(convertUint8ArraysToStrings(vault)).toMatchObject({
-      balance: 0n,
-      createdAt: TEST_CREATED_AT,
-    });
+  });
+
+  it("rejects withdrawal when the witness secret does not match an existing vault", () => {
+    const simulator = VaultSimulator.deployContract();
+
+    simulator.deposit(1_000n);
+    simulator.circuitContext.currentPrivateState = {
+      secretKey: randomBytes(32),
+    };
+
+    expect(() => simulator.withdraw(100n)).toThrow(
+      "You have no vault position"
+    );
+  });
+
+  it("rejects withdrawal when a stolen witness secret is used from a different public key", () => {
+    const victimSecret = randomBytes(32);
+    const victim = VaultSimulator.deployContract(
+      createVaultPrivateState(victimSecret)
+    );
+
+    victim.deposit(1_000n);
+
+    const attacker = VaultSimulator.deployContract(
+      createVaultPrivateState(victimSecret)
+    );
+    attacker.circuitContext.currentQueryContext = new QueryContext(
+      victim.circuitContext.currentQueryContext.state,
+      victim.contractAddress
+    );
+
+    expect(() => attacker.withdraw(100n)).toThrow(
+      "Unauthorized: You are not the owner"
+    );
   });
 });

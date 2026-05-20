@@ -27,7 +27,6 @@ export interface VaultSimulatorType {
   circuitContext: CircuitContext<VaultPrivateState>;
 }
 
-export const TEST_CREATED_AT = 1_714_608_000n;
 export const TEST_COIN_COLOR = encodeRawTokenType(nativeToken().raw);
 
 export const createVaultPrivateState = (
@@ -89,15 +88,6 @@ export class VaultSimulator implements VaultSimulatorType {
       color,
       value: amount,
     };
-  }
-
-  createVault(color = TEST_COIN_COLOR): Ledger {
-    const circuitResult = this.contract.impureCircuits.createVault(
-      this.circuitContext,
-      color
-    );
-
-    return this.updateStateAndGetLedger(circuitResult);
   }
 
   deposit(amount: bigint, color = TEST_COIN_COLOR): Ledger {

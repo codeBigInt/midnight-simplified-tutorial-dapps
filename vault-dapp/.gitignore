@@ -6,6 +6,10 @@ out
 dist
 *.tgz
 
+# readmes
+DEVTO_TUTORIAL.md
+YOUTUBE_DESCRIPTION.md
+
 # code coverage
 coverage
 *.lcov
